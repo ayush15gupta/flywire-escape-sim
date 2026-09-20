@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FlyWire Escape Circuit Simulator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#1a1510;color:#e8dfd0}
+#app{display:grid;grid-template-columns:1fr 280px;grid-template-rows:56px 1fr;height:100vh}
+header{grid-column:1/-1;background:#2c2418;border-bottom:1px solid #4a3f32;display:flex;align-items:center;padding:0 24px;gap:16px}
+header h1{font-size:16px;font-weight:800;color:#d4a23a;letter-spacing:.04em}
+header .tag{font-size:11px;background:#3d3226;color:#a89a88;padding:3px 10px;border-radius:99px;font-weight:700}
+header .spacer{flex:1}
+header button{background:#5a8a5c;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s}
+header button:hover{background:#4a7a4c}
+header button.danger{background:#b5453a}
+header button.danger:hover{background:#9a3a30}
+#canvas-wrap{position:relative;background:#211c14;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+#escape-banner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);font-size:72px;font-weight:950;color:#d4a23a;text-shadow:0 0 40px rgba(212,162,58,.6),0 0 80px rgba(212,162,58,.3);pointer-events:none;transition:transform .15s ease-out;letter-spacing:.06em;z-index:10}
+#escape-banner.show{transform:translate(-50%,-50%) scale(1)}
+#sidebar{background:#2c2418;border-left:1px solid #4a3f32;overflow-y:auto;padding:16px;font-size:12px}
+.panel{background:#362e22;border:1px solid #4a3f32;border-radius:10px;padding:12px;margin-bottom:12px}
+.panel h3{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#a89a88;margin-bottom:8px;font-weight:800}
+.stat-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #3d3226}
+.stat-row:last-child{border:none}
+.stat-label{color:#8a7e6e}
+.stat-val{color:#e8dfd0;font-weight:700;font-family:"JetBrains Mono",monospace}
+.legend{display:flex;flex-wrap:wrap;gap:6px}
+.leg-item{display:flex;align-items:center;gap:4px;font-size:11px;color:#a89a88}
+.leg-dot{width:8px;height:8px;border-radius:50%}
+.stim-btn{width:100%;padding:7px;margin-top:4px;border:1px solid #4a3f32;background:#3d3226;color:#e8dfd0;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;transition:background .12s}
+.stim-btn:hover{background:#4a3f32}
+.stim-btn .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px}
+#spike-log{max-height:120px;overflow-y:auto;font-family:"JetBrains Mono",monospace;font-size:10px;line-height:1.5;color:#8a7e6e}
+#spike-log .gf{color:#d4a23a;font-weight:700}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>FlyWire Escape Circuit</h1>
+    <span class="tag" id="neuron-count">Loading...</span>
+    <span class="tag" id="edge-count"></span>
+    <span class="spacer"></span>
+    <button id="btn-loom" title="Simulate looming stimulus to LC4/LPLC2">Simulate Loom</button>
+    <button id="btn-reset" class="danger" title="Reset all membrane potentials">Reset</button>
+  </header>
+  <div id="canvas-wrap">
+    <canvas id="brain"></canvas>
+    <div id="escape-banner">ESCAPE!</div>
+  </div>
+  <div id="sidebar">
+    <div class="panel">
+      <h3>Circuit Info</h3>
+      <div class="stat-row"><span class="stat-label">Source</span><span class="stat-val">FlyWire FAFB v783</span></div>
+      <div class="stat-row"><span class="stat-label">Neurons</span><span class="stat-val" id="s-neurons">-</span></div>
+      <div class="stat-row"><span class="stat-label">Synapses</span><span class="stat-val" id="s-edges">-</span></div>
+      <div class="stat-row"><span class="stat-label">Sim rate</span><span class="stat-val" id="s-rate">1000 Hz</span></div>
+    </div>
+    <div class="panel">
+      <h3>Legend</h3>
+      <div class="legend">
+        <div class="leg-item"><div class="leg-dot" style="background:#e0c75a"></div>LC4</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#e0a03a"></div>LPLC2</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#d4a23a"></div>Giant Fiber</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#5a8a5c"></div>Walk</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#3d7a99"></div>Steer</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#7b5ea7"></div>Groom</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#b5453a"></div>Escape Wing</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#c4652a"></div>MDN</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#555"></div>Partner</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>LIF Parameters</h3>
+      <div class="stat-row"><span class="stat-label">V_rest</span><span class="stat-val">-70 mV</span></div>
+      <div class="stat-row"><span class="stat-label">V_thresh</span><span class="stat-val">-55 mV</span></div>
+      <div class="stat-row"><span class="stat-label">V_reset</span><span class="stat-val">-80 mV</span></div>
+      <div class="stat-row"><span class="stat-label">tau_m</span><span class="stat-val">20 ms</span></div>
+      <div class="stat-row"><span class="stat-label">Refractory</span><span class="stat-val">2 ms</span></div>
+    </div>
+    <div class="panel">
+      <h3>Stimulate</h3>
+      <button class="stim-btn" data-role="lc4"><span class="dot" style="background:#e0c75a"></span>LC4 (looming)</button>
+      <button class="stim-btn" data-role="lplc2"><span class="dot" style="background:#e0a03a"></span>LPLC2 (looming)</button>
+      <button class="stim-btn" data-role="gf"><span class="dot" style="background:#d4a23a"></span>Giant Fiber</button>
+      <button class="stim-btn" data-role="steer"><span class="dot" style="background:#3d7a99"></span>Steering DNs</button>
+      <button class="stim-btn" data-role="groom"><span class="dot" style="background:#7b5ea7"></span>Grooming DNs</button>
+      <button class="stim-btn" data-role="walk"><span class="dot" style="background:#5a8a5c"></span>Walking DNs</button>
+      <button class="stim-btn" data-role="mdn"><span class="dot" style="background:#c4652a"></span>MDN (backward)</button>
+    </div>
+    <div class="panel">
+      <h3>Spike Log</h3>
+      <div id="spike-log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ROLE_COLOR = {
+  lc4:     "#e0c75a",
+  lplc2:   "#e0a03a",
+  gf:      "#d4a23a",
+  walk:    "#5a8a5c",
+  steer:   "#3d7a99",
+  groom:   "#7b5ea7",
+  escw:    "#b5453a",
+  mdn:     "#c4652a",
+  partner: "#555555",
+};
+
+const V_REST = -70, V_THRESH = -55, V_RESET = -80, TAU_M = 20, REFRACT_MS = 2;
+const DT = 1;
+const STEPS_PER_FRAME = 16;
+const SYNAPSE_SCALE = 0.35;
+const STIM_CURRENT = 25.0;
+const STIM_DURATION_MS = 500;
+
+let neurons = [], edges = [], N = 0;
+let V, refract, spiked, spikeAge;
+let outgoing;
+let stimEnd;
+let escapeTimer = 0;
+let running = false;
+let canvas, ctx, W, H;
+
+async function loadCircuit() {
+  try {
+    const resp = await fetch("data/circuit.json");
+    const data = await resp.json();
+    neurons = data.neurons;
+    edges = data.edges;
+  } catch {
+    neurons = generateFallbackCircuit();
+    edges = generateFallbackEdges(neurons);
+  }
+  N = neurons.length;
+  console.log(`Circuit loaded: ${N} neurons, ${edges.length} edges`);
+  initSim();
+  document.getElementById("s-neurons").textContent = N;
+  document.getElementById("s-edges").textContent = edges.length.toLocaleString();
+  document.getElementById("neuron-count").textContent = N + " neurons";
+  document.getElementById("edge-count").textContent = edges.length.toLocaleString() + " synapses";
+}
+
+function generateFallbackCircuit() {
+  const defs = [
+    { type: "LC4", role: "lc4", n: 80 },
+    { type: "LPLC2", role: "lplc2", n: 60 },
+    { type: "DNp01", role: "gf", n: 2 },
+    { type: "DNp09", role: "walk", n: 2 },
+    { type: "DNa01", role: "steer", n: 4 },
+    { type: "DNg11", role: "groom", n: 6 },
+    { type: "MDN", role: "mdn", n: 4 },
+    { type: "DNp02", role: "escw", n: 6 },
+    { type: "partner", role: "partner", n: 200 },
+  ];
+  const ns = [];
+  for (const d of defs) {
+    for (let i = 0; i < d.n; i++) {
+      let x, y;
+      if (d.role === "lc4") { x = 0.1 + Math.random() * 0.18; y = 0.15 + Math.random() * 0.25; }
+      else if (d.role === "lplc2") { x = 0.1 + Math.random() * 0.18; y = 0.55 + Math.random() * 0.25; }
+      else if (d.role === "gf") { x = 0.45 + Math.random() * 0.1; y = 0.4 + Math.random() * 0.2; }
+      else if (d.role === "partner") { x = 0.25 + Math.random() * 0.5; y = 0.05 + Math.random() * 0.9; }
+      else { x = 0.7 + Math.random() * 0.22; y = 0.15 + Math.random() * 0.7; }
+      ns.push({ id: `fb_${ns.length}`, type: d.type, role: d.role, pos: [x, y, Math.random()] });
+    }
+  }
+  return ns;
+}
+
+function generateFallbackEdges(ns) {
+  const byRole = {};
+  ns.forEach((n, i) => { (byRole[n.role] = byRole[n.role] || []).push(i); });
+  const es = [];
+  const connect = (from, to, wMin, wMax) => {
+    for (const i of (byRole[from] || [])) {
+      for (const j of (byRole[to] || [])) {
+        if (Math.random() < 0.3) es.push([i, j, wMin + Math.random() * (wMax - wMin)]);
+      }
+    }
+  };
+  connect("lc4", "gf", 5, 15);
+  connect("lplc2", "gf", 3, 10);
+  connect("lc4", "partner", 2, 6);
+  connect("lplc2", "partner", 2, 6);
+  connect("partner", "gf", 1, 4);
+  connect("gf", "escw", 8, 20);
+  connect("gf", "walk", 3, 8);
+  connect("gf", "steer", 2, 6);
+  connect("partner", "steer", 1, 3);
+  connect("partner", "walk", 1, 3);
+  connect("partner", "groom", -4, -1);
+  connect("partner", "mdn", 1, 3);
+  connect("partner", "partner", -3, 3);
+  return es;
+}
+
+function initSim() {
+  V = new Float64Array(N).fill(V_REST);
+  refract = new Float64Array(N);
+  spiked = new Uint8Array(N);
+  spikeAge = new Float64Array(N).fill(999);
+  stimEnd = new Float64Array(N);
+
+  outgoing = new Array(N);
+  for (let i = 0; i < N; i++) outgoing[i] = [];
+  for (const [pre, post, w] of edges) {
+    if (pre < N && post < N) outgoing[pre].push({ post, w });
+  }
+  running = true;
+}
+
+function stimulateRole(role, duration) {
+  const now = performance.now();
+  let count = 0;
+  for (let i = 0; i < N; i++) {
+    if (neurons[i].role === role) { stimEnd[i] = now + (duration || STIM_DURATION_MS); count++; }
+  }
+  console.log(`stimulateRole(${role}): ${count} neurons stimulated for ${duration}ms`);
+}
+
+function stepSim() {
+  const now = performance.now();
+  spiked.fill(0);
+  for (let i = 0; i < N; i++) {
+    if (refract[i] > 0) { refract[i] -= DT; continue; }
+    let I_ext = (now < stimEnd[i]) ? STIM_CURRENT : 0;
+    const dv = (-(V[i] - V_REST) + I_ext) / TAU_M * DT;
+    V[i] += dv;
+    if (V[i] >= V_THRESH) {
+      spiked[i] = 1;
+      spikeAge[i] = 0;
+      V[i] = V_RESET;
+      refract[i] = REFRACT_MS;
+      for (const { post, w } of outgoing[i]) {
+        V[post] += w * SYNAPSE_SCALE;
+      }
+    }
+    V[i] = Math.max(V[i], V_RESET);
+  }
+  for (let i = 0; i < N; i++) {
+    if (!spiked[i]) spikeAge[i] += DT;
+  }
+}
+
+function checkEscape() {
+  for (let i = 0; i < N; i++) {
+    if (neurons[i].role === "gf" && spiked[i]) {
+      escapeTimer = 120;
+      logSpike("Giant Fiber SPIKED!", true);
+      return;
+    }
+  }
+  for (let i = 0; i < N; i++) {
+    if (spiked[i] && neurons[i].role !== "partner" && neurons[i].role !== "lc4" && neurons[i].role !== "lplc2") {
+      logSpike(`${neurons[i].type} spike`);
+    }
+  }
+}
+
+const spikeLogEl = document.getElementById("spike-log");
+let logLines = 0;
+function logSpike(msg, isGF) {
+  const el = document.createElement("div");
+  el.textContent = `[${(performance.now()/1000).toFixed(1)}s] ${msg}`;
+  if (isGF) el.className = "gf";
+  spikeLogEl.prepend(el);
+  logLines++;
+  if (logLines > 50) spikeLogEl.removeChild(spikeLogEl.lastChild);
+}
+
+function resizeCanvas() {
+  const wrap = document.getElementById("canvas-wrap");
+  W = canvas.width = wrap.clientWidth * devicePixelRatio;
+  H = canvas.height = wrap.clientHeight * devicePixelRatio;
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+}
+
+function draw() {
+  const cw = W / devicePixelRatio, ch = H / devicePixelRatio;
+  ctx.clearRect(0, 0, cw, ch);
+
+  const pad = 40;
+  const drawW = cw - pad * 2, drawH = ch - pad * 2;
+
+  ctx.globalAlpha = 0.06;
+  ctx.strokeStyle = "#a89a88";
+  ctx.lineWidth = 0.5;
+  for (const [pre, post, w] of edges) {
+    if (pre >= N || post >= N) continue;
+    if (Math.random() > 0.02) continue;
+    const n1 = neurons[pre], n2 = neurons[post];
+    ctx.beginPath();
+    ctx.moveTo(pad + n1.pos[0] * drawW, pad + n1.pos[1] * drawH);
+    ctx.lineTo(pad + n2.pos[0] * drawW, pad + n2.pos[1] * drawH);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  for (let i = 0; i < N; i++) {
+    const n = neurons[i];
+    const x = pad + n.pos[0] * drawW;
+    const y = pad + n.pos[1] * drawH;
+    const age = spikeAge[i];
+    const baseColor = ROLE_COLOR[n.role] || "#555";
+    let r = n.role === "gf" ? 6 : n.role === "partner" ? 2 : 3.5;
+
+    if (age < 30) {
+      const t = 1 - age / 30;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 12 * t, 0, Math.PI * 2);
+      ctx.fillStyle = baseColor;
+      ctx.globalAlpha = t * 0.5;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      r += 3 * t;
+    }
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = age < 15 ? "#fff" : baseColor;
+    ctx.globalAlpha = n.role === "partner" ? 0.4 : 0.9;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    if (n.role === "gf") {
+      ctx.font = "bold 9px Inter";
+      ctx.fillStyle = "#d4a23a";
+      ctx.textAlign = "center";
+      ctx.fillText("GF", x, y - 10);
+    }
+  }
+
+  const banner = document.getElementById("escape-banner");
+  if (escapeTimer > 0) {
+    escapeTimer--;
+    banner.classList.add("show");
+  } else {
+    banner.classList.remove("show");
+  }
+
+  drawLabels(ctx, pad, drawW, drawH);
+}
+
+function drawLabels(ctx, pad, drawW, drawH) {
+  ctx.font = "bold 11px Inter";
+  ctx.globalAlpha = 0.5;
+  const labels = [
+    { text: "LOOMING DETECTORS", x: 0.15, y: 0.05 },
+    { text: "GIANT FIBER", x: 0.47, y: 0.33 },
+    { text: "MOTOR OUTPUT", x: 0.8, y: 0.05 },
+  ];
+  for (const l of labels) {
+    ctx.fillStyle = "#a89a88";
+    ctx.textAlign = "center";
+    ctx.fillText(l.text, pad + l.x * drawW, pad + l.y * drawH);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function loop() {
+  if (!running) { requestAnimationFrame(loop); return; }
+  for (let s = 0; s < STEPS_PER_FRAME; s++) {
+    stepSim();
+    checkEscape();
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById("btn-loom").addEventListener("click", () => {
+  stimulateRole("lc4", 500);
+  stimulateRole("lplc2", 500);
+  logSpike("Looming stimulus applied to LC4 + LPLC2");
+});
+
+document.getElementById("btn-reset").addEventListener("click", () => {
+  V.fill(V_REST);
+  refract.fill(0);
+  spiked.fill(0);
+  spikeAge.fill(999);
+  stimEnd.fill(0);
+  escapeTimer = 0;
+  logSpike("Circuit reset");
+});
+
+document.querySelectorAll(".stim-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const role = btn.dataset.role;
+    stimulateRole(role, STIM_DURATION_MS);
+    logSpike(`Stimulating ${role.toUpperCase()}`);
+  });
+});
+
+canvas = document.getElementById("brain");
+ctx = canvas.getContext("2d");
+window.addEventListener("resize", resizeCanvas);
+
+(async () => {
+  resizeCanvas();
+  await loadCircuit();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
