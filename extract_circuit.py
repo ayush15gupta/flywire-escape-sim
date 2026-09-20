@@ -8,22 +8,39 @@ synapses by neurotransmitter type, and outputs a compact circuit.json.
 
 Uses only Python stdlib -- no pip installs required.
 
+SETUP:
+  1. Sign in at https://codex.flywire.ai/ with a Google account (free)
+  2. Copy your API token from the Account page
+  3. Export it as an environment variable named CODEX_API_TOKEN
+  4. Run:  python3 extract_circuit.py
+
 Data source: FlyWire Codex FAFB v783
   https://codex.flywire.ai/api/download?dataset=fafb
-License: CC-BY 4.0 (FlyWire Consortium)
+License: CC-BY-NC 4.0 (FlyWire Consortium)
+
+Citation:
+  Dorkenwald, S. et al. Neuronal wiring diagram of an adult brain.
+  Nature 634, 124-138 (2024). https://doi.org/10.1038/s41586-024-07558-y
 """
 
 import urllib.request
+import urllib.error
 import gzip
 import csv
 import json
 import os
+import sys
 from collections import defaultdict
-from io import TextIOWrapper
 
 CODEX_BASE = "https://codex.flywire.ai/api/download_resource"
 DATASET = "fafb"
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+TOKEN_ENV_VAR = "CODEX_API_TOKEN"
+
+
+def get_token():
+    """Read the Codex access credential from the environment."""
+    return os.environ.get(TOKEN_ENV_VAR, "").strip()
 
 CORE_TYPES = {
     "LC4":    "lc4",
@@ -53,22 +70,48 @@ TOP_PARTNERS = 330
 
 
 def fetch_csv(data_product):
-    """Stream a gzipped CSV from Codex and yield rows as dicts."""
+    """Stream a gzipped CSV from Codex and return rows as dicts."""
     url = f"{CODEX_BASE}?data_product={data_product}&dataset={DATASET}"
+    token = get_token()
+    if token:
+        url += f"&api_token={token}"
     print(f"  Downloading {data_product}...")
     req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        raw = resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            raw = resp.read()
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            sys.exit(
+                "\nERROR: Codex rejected the request (HTTP %d).\n"
+                "  Set a valid API token:\n"
+                "    1. Sign in at https://codex.flywire.ai/\n"
+                "    2. Copy your token from the Account page\n"
+                "    3. Set the CODEX_API_TOKEN environment variable\n" % e.code
+            )
+        raise
 
-    decompressed = gzip.decompress(raw).decode("utf-8")
-    reader = csv.DictReader(decompressed.splitlines())
-    return list(reader)
+    if raw[:1] == b"{":
+        sys.exit(f"\nERROR: Codex returned an error instead of data:\n  {raw[:300].decode()}\n")
+
+    try:
+        decompressed = gzip.decompress(raw).decode("utf-8")
+    except gzip.BadGzipFile:
+        decompressed = raw.decode("utf-8")
+
+    return list(csv.DictReader(decompressed.splitlines()))
 
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     print("=== FlyWire Escape Circuit Extractor ===\n")
+
+    if not get_token():
+        print(f"WARNING: {TOKEN_ENV_VAR} is not set.")
+        print("  Codex requires a free API token for programmatic downloads.")
+        print("  Sign in at https://codex.flywire.ai/ and copy your token")
+        print("  from the Account page, then set CODEX_API_TOKEN.\n")
 
     print("[1/5] Downloading cell types...")
     cell_rows = fetch_csv("consolidated_cell_types")

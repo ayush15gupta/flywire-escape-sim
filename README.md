@@ -6,7 +6,19 @@ Extracts the fruit fly's escape-response circuit — the same neurons a real fly
 
 ## Quick Start
 
-### 1. Extract the circuit (requires internet)
+### 1. Get a Codex API token (free)
+
+Codex requires a free account for programmatic downloads:
+
+1. Sign in at [codex.flywire.ai](https://codex.flywire.ai/) with a Google account
+2. Copy your API token from the Account page
+3. Set it as an environment variable:
+
+```bash
+export CODEX_API_TOKEN=<paste-your-token>
+```
+
+### 2. Extract the circuit
 
 ```bash
 python3 extract_circuit.py
@@ -16,7 +28,9 @@ This downloads real cell type and connection data from the FlyWire Codex API, fi
 
 No pip installs needed — uses only Python standard library.
 
-### 2. Open the simulator
+**Alternative (no account needed):** bulk connectivity data is available on [Zenodo](https://zenodo.org/records/10676866) as feather files, though those are much larger (852 MB - 9.5 GB).
+
+### 3. Open the simulator
 
 ```bash
 # Any local server works:
@@ -50,10 +64,11 @@ All neuron identities, synaptic connections, synapse counts, and neurotransmitte
 
 ## Data Source
 
-- **FlyWire Consortium**: Dorkenwald, S. et al. "Neuronal wiring diagram of an adult brain." *Nature* (2024). [DOI: 10.1038/s41586-024-07558-y](https://doi.org/10.1038/s41586-024-07558-y)
-- Data accessed via [Codex](https://codex.flywire.ai/) under CC-BY 4.0.
+- **FlyWire Consortium**: Dorkenwald, S. et al. "Neuronal wiring diagram of an adult brain." *Nature* 634, 124-138 (2024). [DOI: 10.1038/s41586-024-07558-y](https://doi.org/10.1038/s41586-024-07558-y)
+- **Cell typing**: Schlegel, P. et al. "Whole-brain annotation and multi-connectome cell typing of Drosophila." *Nature* 634, 139-152 (2024). [DOI: 10.1038/s41586-024-07686-5](https://doi.org/10.1038/s41586-024-07686-5)
+- Data accessed via [Codex](https://codex.flywire.ai/) under CC-BY-NC 4.0.
 - Inspired by [DesktopFly](https://github.com/DenisSergeevitch/desktop-fly) by Denis Shiryaev.
 
 ## License
 
-Code: MIT. Connectome data: CC-BY 4.0 (FlyWire Consortium).
+Code: MIT. Connectome-derived data: CC-BY-NC 4.0 (FlyWire Consortium).
